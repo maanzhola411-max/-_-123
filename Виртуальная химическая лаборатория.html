@@ -1,0 +1,1386 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Виртуальная химическая лаборатория</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            min-height: 100vh;
+            color: #fff;
+            overflow-x: hidden;
+        }
+
+        /* Тряска экрана при взрыве */
+        body.shake {
+            animation: shake 0.6s cubic-bezier(.36,.07,.19,.97) both;
+        }
+
+        @keyframes shake {
+            10%, 90% { transform: translate3d(-2px, 0, 0); }
+            20%, 80% { transform: translate3d(4px, 0, 0); }
+            30%, 50%, 70% { transform: translate3d(-8px, 0, 0); }
+            40%, 60% { transform: translate3d(8px, 0, 0); }
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        header {
+            text-align: center;
+            padding: 20px 0;
+            border-bottom: 2px solid rgba(255, 255, 255, 0.1);
+            margin-bottom: 20px;
+        }
+
+        h1 {
+            font-size: 2.5em;
+            background: linear-gradient(90deg, #ffd700, #ff6b6b, #4ecdc4);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 10px;
+            text-shadow: 0 0 30px rgba(255, 215, 0, 0.3);
+        }
+
+        .subtitle {
+            color: #aaa;
+            font-size: 1.1em;
+        }
+
+        .main-layout {
+            display: grid;
+            grid-template-columns: 1fr 350px;
+            gap: 20px;
+        }
+
+        /* Пробирка */
+        .lab-bench {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 20px;
+            padding: 30px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            position: relative;
+        }
+
+        .test-tube-wrapper {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .test-tube {
+            width: 120px;
+            height: 380px;
+            background: linear-gradient(to right, 
+                rgba(255, 255, 255, 0.15) 0%, 
+                rgba(255, 255, 255, 0.05) 50%, 
+                rgba(255, 255, 255, 0.15) 100%);
+            border: 3px solid rgba(255, 255, 255, 0.4);
+            border-top: none;
+            border-radius: 0 0 60px 60px;
+            position: relative;
+            overflow: hidden;
+            box-shadow: 
+                inset 0 0 30px rgba(0, 0, 0, 0.3),
+                0 10px 40px rgba(0, 0, 0, 0.5);
+        }
+
+        .test-tube::before {
+            content: '';
+            position: absolute;
+            top: -10px;
+            left: -10px;
+            right: -10px;
+            height: 20px;
+            background: rgba(255, 255, 255, 0.3);
+            border: 3px solid rgba(255, 255, 255, 0.4);
+            border-radius: 10px;
+        }
+
+        .liquid {
+            position: absolute;
+            bottom: 0;
+            width: 100%;
+            height: 0%;
+            transition: all 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+            border-radius: 0 0 57px 57px;
+        }
+
+        .precipitate {
+            position: absolute;
+            bottom: 0;
+            width: 100%;
+            height: 0%;
+            transition: all 0.8s ease;
+            border-radius: 0 0 57px 57px;
+        }
+
+        .bubbles {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+
+        .bubble {
+            position: absolute;
+            background: rgba(255, 255, 255, 0.7);
+            border-radius: 50%;
+            animation: rise 2s infinite;
+        }
+
+        @keyframes rise {
+            0% { transform: translateY(0) scale(1); opacity: 0.8; }
+            100% { transform: translateY(-350px) scale(0.3); opacity: 0; }
+        }
+
+        /* Дым */
+        .smoke {
+            position: absolute;
+            top: -50px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 80px;
+            height: 80px;
+            pointer-events: none;
+        }
+
+        .smoke-particle {
+            position: absolute;
+            background: radial-gradient(circle, rgba(200, 200, 200, 0.6), transparent);
+            border-radius: 50%;
+            animation: smokeRise 3s infinite;
+        }
+
+        @keyframes smokeRise {
+            0% { transform: translate(0, 0) scale(0.5); opacity: 0; }
+            20% { opacity: 0.8; }
+            100% { transform: translate(var(--dx), -150px) scale(2); opacity: 0; }
+        }
+
+        /* Огонь */
+        .fire {
+            position: absolute;
+            top: -40px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 80px;
+            height: 80px;
+            pointer-events: none;
+            display: none;
+        }
+
+        .fire.active { display: block; }
+
+        .flame {
+            position: absolute;
+            bottom: 0;
+            left: 50%;
+            width: 40px;
+            height: 60px;
+            background: radial-gradient(ellipse at bottom, #ffeb3b, #ff9800, #f44336, transparent);
+            border-radius: 50% 50% 20% 20%;
+            transform-origin: bottom center;
+            animation: flicker 0.3s infinite alternate;
+        }
+
+        @keyframes flicker {
+            0% { transform: translateX(-50%) scale(1, 1) rotate(-2deg); }
+            100% { transform: translateX(-50%) scale(1.1, 1.2) rotate(2deg); }
+        }
+
+        /* Взрыв */
+        .explosion {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 0;
+            height: 0;
+            border-radius: 50%;
+            background: radial-gradient(circle, #fff, #ffeb3b, #ff5722, transparent);
+            pointer-events: none;
+            z-index: 1000;
+            opacity: 0;
+        }
+
+        .explosion.active {
+            animation: explode 1.2s ease-out;
+        }
+
+        @keyframes explode {
+            0% { width: 0; height: 0; opacity: 1; }
+            50% { width: 150vmax; height: 150vmax; opacity: 0.9; }
+            100% { width: 200vmax; height: 200vmax; opacity: 0; }
+        }
+
+        .explosion-particle {
+            position: fixed;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            pointer-events: none;
+            z-index: 1001;
+        }
+
+        /* Свечение */
+        .glow {
+            animation: glow 1s ease-in-out;
+        }
+
+        @keyframes glow {
+            0%, 100% { box-shadow: inset 0 0 30px rgba(0, 0, 0, 0.3), 0 10px 40px rgba(0, 0, 0, 0.5); }
+            50% { box-shadow: inset 0 0 50px rgba(255, 255, 255, 0.8), 0 0 80px rgba(255, 255, 255, 0.6); }
+        }
+
+        .controls {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 25px;
+            font-size: 1em;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-weight: bold;
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(102, 126, 234, 0.6);
+        }
+
+        button.danger {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+        }
+
+        button.success {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+        }
+
+        /* Панель реактивов */
+        .reagents-panel {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 20px;
+            padding: 20px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+
+        .reagents-panel::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .reagents-panel::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 10px;
+        }
+
+        .reagents-panel::-webkit-scrollbar-thumb {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            border-radius: 10px;
+        }
+
+        .category-title {
+            color: #ffd700;
+            font-size: 1.1em;
+            margin: 15px 0 10px 0;
+            padding-bottom: 5px;
+            border-bottom: 1px solid rgba(255, 215, 0, 0.3);
+        }
+
+        .reagents-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+        }
+
+        .reagent {
+            background: rgba(255, 255, 255, 0.08);
+            border: 2px solid rgba(255, 255, 255, 0.15);
+            border-radius: 12px;
+            padding: 12px 8px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .reagent:hover {
+            transform: translateY(-3px);
+            border-color: #ffd700;
+            box-shadow: 0 5px 20px rgba(255, 215, 0, 0.3);
+        }
+
+        .reagent.dangerous {
+            border-color: rgba(255, 87, 34, 0.5);
+        }
+
+        .reagent.dangerous::after {
+            content: '⚠️';
+            position: absolute;
+            top: 5px;
+            right: 5px;
+            font-size: 0.8em;
+        }
+
+        .reagent.selected {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-color: #fff;
+        }
+
+        .reagent-icon {
+            font-size: 1.8em;
+            margin-bottom: 5px;
+        }
+
+        .reagent-name {
+            font-size: 0.75em;
+            font-weight: bold;
+            color: #fff;
+            margin-bottom: 3px;
+            line-height: 1.2;
+        }
+
+        .reagent-formula {
+            font-size: 0.7em;
+            color: #4ecdc4;
+            font-family: 'Courier New', monospace;
+        }
+
+        /* Помощник */
+        .assistant {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            display: flex;
+            align-items: flex-end;
+            gap: 15px;
+            z-index: 100;
+            pointer-events: none;
+        }
+
+        .assistant-avatar {
+            width: 80px;
+            height: 80px;
+            background: linear-gradient(135deg, #ffd700, #ff6b6b);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 3em;
+            box-shadow: 0 10px 30px rgba(255, 215, 0, 0.4);
+            animation: float 3s ease-in-out infinite;
+            pointer-events: auto;
+            cursor: pointer;
+            border: 3px solid #fff;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-10px); }
+        }
+
+        .assistant-bubble {
+            background: white;
+            color: #333;
+            padding: 15px 20px;
+            border-radius: 20px 20px 0 20px;
+            max-width: 300px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            position: relative;
+            opacity: 0;
+            transform: translateX(20px);
+            transition: all 0.4s ease;
+            pointer-events: auto;
+        }
+
+        .assistant-bubble.visible {
+            opacity: 1;
+            transform: translateX(0);
+        }
+
+        .assistant-bubble.warning {
+            background: linear-gradient(135deg, #fff3cd, #ffe69c);
+            border: 2px solid #ff9800;
+        }
+
+        .assistant-bubble.danger {
+            background: linear-gradient(135deg, #f8d7da, #f5c6cb);
+            border: 2px solid #dc3545;
+            animation: pulse 1s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.03); }
+        }
+
+        .assistant-name {
+            font-weight: bold;
+            color: #764ba2;
+            margin-bottom: 5px;
+            font-size: 0.9em;
+        }
+
+        .assistant-text {
+            font-size: 0.95em;
+            line-height: 1.4;
+        }
+
+        /* Модальное окно */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 2000;
+            backdrop-filter: blur(5px);
+        }
+
+        .modal-overlay.active {
+            display: flex;
+            animation: fadeIn 0.3s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        .modal {
+            background: white;
+            color: #333;
+            padding: 30px;
+            border-radius: 20px;
+            max-width: 500px;
+            width: 90%;
+            text-align: center;
+            animation: slideUp 0.4s ease;
+        }
+
+        @keyframes slideUp {
+            from { transform: translateY(50px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+
+        .modal.warning {
+            border: 3px solid #ff9800;
+        }
+
+        .modal.danger {
+            border: 3px solid #dc3545;
+        }
+
+        .modal-icon {
+            font-size: 4em;
+            margin-bottom: 15px;
+        }
+
+        .modal-title {
+            font-size: 1.5em;
+            margin-bottom: 15px;
+            color: #333;
+        }
+
+        .modal-text {
+            font-size: 1.1em;
+            margin-bottom: 25px;
+            line-height: 1.5;
+            color: #555;
+        }
+
+        .modal-buttons {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .modal-buttons button {
+            min-width: 120px;
+        }
+
+        .btn-cancel {
+            background: linear-gradient(135deg, #6c757d, #495057);
+        }
+
+        .btn-confirm {
+            background: linear-gradient(135deg, #f093fb, #f5576c);
+        }
+
+        /* Панель результата */
+        .result-panel {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 15px;
+            padding: 20px;
+            margin-top: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            min-height: 120px;
+        }
+
+        .result-title {
+            color: #ffd700;
+            font-weight: bold;
+            margin-bottom: 10px;
+            font-size: 1.2em;
+        }
+
+        .result-text {
+            color: #ddd;
+            line-height: 1.6;
+        }
+
+        .equation {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 12px;
+            border-radius: 8px;
+            margin-top: 10px;
+            font-family: 'Courier New', monospace;
+            color: #4ecdc4;
+            font-weight: bold;
+            font-size: 1.1em;
+            border-left: 4px solid #4ecdc4;
+        }
+
+        .added-reagents {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            margin: 15px 0;
+            min-height: 40px;
+            flex-wrap: wrap;
+        }
+
+        .added-tag {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            padding: 8px 15px;
+            border-radius: 20px;
+            font-size: 0.9em;
+            font-weight: bold;
+            animation: popIn 0.3s ease;
+        }
+
+        @keyframes popIn {
+            0% { transform: scale(0); }
+            80% { transform: scale(1.1); }
+            100% { transform: scale(1); }
+        }
+
+        @media (max-width: 900px) {
+            .main-layout {
+                grid-template-columns: 1fr;
+            }
+            h1 { font-size: 1.8em; }
+            .assistant-bubble { max-width: 200px; font-size: 0.85em; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🧪 Виртуальная лаборатория</h1>
+            <p class="subtitle">Секция «ИТ-технологии»</p>
+        </header>
+
+        <div class="main-layout">
+            <div class="lab-bench">
+                <div class="test-tube-wrapper">
+                    <div class="added-reagents" id="addedReagents"></div>
+                    <div class="test-tube" id="testTube">
+                        <div class="liquid" id="liquid"></div>
+                        <div class="precipitate" id="precipitate"></div>
+                        <div class="bubbles" id="bubbles"></div>
+                        <div class="smoke" id="smoke"></div>
+                        <div class="fire" id="fire"><div class="flame"></div></div>
+                    </div>
+                    <div class="controls">
+                        <button onclick="mixReagents()" class="success">🧪 Смешать</button>
+                        <button onclick="resetTestTube()">🔄 Очистить</button>
+                    </div>
+                </div>
+
+                <div class="result-panel">
+                    <div class="result-title">📋 Результат эксперимента:</div>
+                    <div class="result-text" id="resultText">
+                        Выберите реактивы из списка справа и нажмите «Смешать» для проведения реакции.
+                        <br><br>
+                        💡 <em>Совет от профессора: будьте осторожны с некоторыми комбинациями — возможны неожиданные эффекты!</em>
+                    </div>
+                </div>
+            </div>
+
+            <div class="reagents-panel">
+                <h2 style="text-align:center; color:#ffd700; margin-bottom:15px;">📦 Реактивы</h2>
+                <div id="reagentsList"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Помощник -->
+    <div class="assistant">
+        <div class="assistant-bubble" id="assistantBubble">
+            <div class="assistant-name">👨🏼‍🔬 Профессор Менделеев</div>
+            <div class="assistant-text" id="assistantText">Приветствую, юный химик! Готов к экспериментам?</div>
+        </div>
+        <div class="assistant-avatar" onclick="showAssistantTip()">👨🏼‍🔬</div>
+    </div>
+
+    <!-- Модальное окно -->
+    <div class="modal-overlay" id="modalOverlay">
+        <div class="modal" id="modal">
+            <div class="modal-icon" id="modalIcon">⚠️</div>
+            <div class="modal-title" id="modalTitle">Предупреждение</div>
+            <div class="modal-text" id="modalText">Вы уверены?</div>
+            <div class="modal-buttons">
+                <button class="btn-cancel" onclick="closeModal(false)">Отмена</button>
+                <button class="btn-confirm" onclick="closeModal(true)">Всё равно добавить</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Взрыв -->
+    <div class="explosion" id="explosion"></div>
+
+    <script>
+        // ====== БАЗА ДАННЫХ РЕАКТИВОВ (30 штук) ======
+        const reagents = [
+            // Кислоты
+            { id: 'HCl', name: 'Соляная кислота', formula: 'HCl', icon: '⚗️', category: 'Кислоты', danger: 1, ions: ['H+', 'Cl-'], color: 'rgba(220, 230, 255, 0.5)' },
+            { id: 'H2SO4', name: 'Серная кислота', formula: 'H₂SO₄', icon: '⚗️', category: 'Кислоты', danger: 3, ions: ['H+', 'SO4^2-'], color: 'rgba(240, 240, 255, 0.6)', concentrated: true },
+            { id: 'HNO3', name: 'Азотная кислота', formula: 'HNO₃', icon: '⚗️', category: 'Кислоты', danger: 3, ions: ['H+', 'NO3-'], color: 'rgba(255, 250, 220, 0.6)', concentrated: true },
+            { id: 'H3PO4', name: 'Фосфорная кислота', formula: 'H₃PO₄', icon: '⚗️', category: 'Кислоты', danger: 1, ions: ['H+', 'PO4^3-'], color: 'rgba(230, 240, 255, 0.5)' },
+            { id: 'CH3COOH', name: 'Уксусная кислота', formula: 'CH₃COOH', icon: '🍶', category: 'Кислоты', danger: 0, ions: ['H+', 'CH3COO-'], color: 'rgba(245, 245, 245, 0.5)' },
+            
+            // Щёлочи
+            { id: 'NaOH', name: 'Гидроксид натрия', formula: 'NaOH', icon: '🧪', category: 'Щёлочи', danger: 2, ions: ['Na+', 'OH-'], color: 'rgba(230, 240, 255, 0.5)' },
+            { id: 'KOH', name: 'Гидроксид калия', formula: 'KOH', icon: '🧪', category: 'Щёлочи', danger: 2, ions: ['K+', 'OH-'], color: 'rgba(230, 240, 255, 0.5)' },
+            { id: 'CaOH2', name: 'Гидроксид кальция', formula: 'Ca(OH)₂', icon: '🧪', category: 'Щёлочи', danger: 1, ions: ['Ca2+', 'OH-'], color: 'rgba(245, 245, 255, 0.6)' },
+            { id: 'BaOH2', name: 'Гидроксид бария', formula: 'Ba(OH)₂', icon: '🧪', category: 'Щёлочи', danger: 2, ions: ['Ba2+', 'OH-'], color: 'rgba(240, 245, 255, 0.5)' },
+            { id: 'NH4OH', name: 'Нашатырный спирт', formula: 'NH₄OH', icon: '💨', category: 'Щёлочи', danger: 1, ions: ['NH4+', 'OH-'], color: 'rgba(230, 250, 255, 0.5)' },
+            
+            // Соли
+            { id: 'NaCl', name: 'Поваренная соль', formula: 'NaCl', icon: '🧂', category: 'Соли', danger: 0, ions: ['Na+', 'Cl-'], color: 'rgba(240, 240, 240, 0.5)' },
+            { id: 'Na2CO3', name: 'Карбонат натрия', formula: 'Na₂CO₃', icon: '🔬', category: 'Соли', danger: 0, ions: ['Na+', 'CO3^2-'], color: 'rgba(245, 245, 245, 0.5)' },
+            { id: 'NaHCO3', name: 'Сода пищевая', formula: 'NaHCO₃', icon: '🥄', category: 'Соли', danger: 0, ions: ['Na+', 'HCO3-'], color: 'rgba(250, 250, 250, 0.5)' },
+            { id: 'CuSO4', name: 'Медный купорос', formula: 'CuSO₄', icon: '💧', category: 'Соли', danger: 1, ions: ['Cu2+', 'SO4^2-'], color: 'rgba(100, 180, 255, 0.7)' },
+            { id: 'FeCl2', name: 'Хлорид железа(II)', formula: 'FeCl₂', icon: '🎨', category: 'Соли', danger: 1, ions: ['Fe2+', 'Cl-'], color: 'rgba(180, 220, 180, 0.6)' },
+            { id: 'FeCl3', name: 'Хлорид железа(III)', formula: 'FeCl₃', icon: '🎨', category: 'Соли', danger: 1, ions: ['Fe3+', 'Cl-'], color: 'rgba(180, 120, 60, 0.7)' },
+            { id: 'AgNO3', name: 'Ляпис (нитрат серебра)', formula: 'AgNO₃', icon: '✨', category: 'Соли', danger: 1, ions: ['Ag+', 'NO3-'], color: 'rgba(240, 240, 255, 0.6)' },
+            { id: 'BaCl2', name: 'Хлорид бария', formula: 'BaCl₂', icon: '⚗️', category: 'Соли', danger: 2, ions: ['Ba2+', 'Cl-'], color: 'rgba(240, 240, 240, 0.5)' },
+            { id: 'PbNO32', name: 'Нитрат свинца', formula: 'Pb(NO₃)₂', icon: '☠️', category: 'Соли', danger: 3, ions: ['Pb2+', 'NO3-'], color: 'rgba(240, 240, 240, 0.6)' },
+            { id: 'KMnO4', name: 'Марганцовка', formula: 'KMnO₄', icon: '🟣', category: 'Соли', danger: 2, ions: ['K+', 'MnO4-'], color: 'rgba(150, 50, 180, 0.8)', oxidizer: true },
+            { id: 'K2Cr2O7', name: 'Дихромат калия', formula: 'K₂Cr₂O₇', icon: '🟠', category: 'Соли', danger: 3, ions: ['K+', 'Cr2O7^2-'], color: 'rgba(255, 140, 0, 0.8)', oxidizer: true },
+            { id: 'FeSO4', name: 'Железный купорос', formula: 'FeSO₄', icon: '🎨', category: 'Соли', danger: 1, ions: ['Fe2+', 'SO4^2-'], color: 'rgba(150, 200, 150, 0.6)' },
+            { id: 'AlCl3', name: 'Хлорид алюминия', formula: 'AlCl₃', icon: '⚗️', category: 'Соли', danger: 1, ions: ['Al3+', 'Cl-'], color: 'rgba(240, 240, 240, 0.5)' },
+            { id: 'ZnSO4', name: 'Сульфат цинка', formula: 'ZnSO₄', icon: '💧', category: 'Соли', danger: 1, ions: ['Zn2+', 'SO4^2-'], color: 'rgba(230, 240, 255, 0.5)' },
+            { id: 'CaCl2', name: 'Хлорид кальция', formula: 'CaCl₂', icon: '⚗️', category: 'Соли', danger: 0, ions: ['Ca2+', 'Cl-'], color: 'rgba(240, 240, 240, 0.5)' },
+            
+            // Особые
+            { id: 'H2O2', name: 'Перекись водорода', formula: 'H₂O₂', icon: '💦', category: 'Особые', danger: 1, ions: [], color: 'rgba(230, 240, 255, 0.4)', oxidizer: true },
+            { id: 'C2H5OH', name: 'Этиловый спирт', formula: 'C₂H₅OH', icon: '🍷', category: 'Особые', danger: 1, ions: [], color: 'rgba(240, 240, 255, 0.4)', organic: true },
+            { id: 'C6H12O6', name: 'Глюкоза', formula: 'C₆H₁₂O₆', icon: '🍬', category: 'Особые', danger: 0, ions: [], color: 'rgba(255, 250, 230, 0.5)', organic: true },
+            { id: 'Phenol', name: 'Фенолфталеин', formula: 'C₂₀H₁₄O₄', icon: '🌸', category: 'Индикаторы', danger: 0, ions: [], color: 'rgba(255, 255, 255, 0.3)', indicator: true },
+            { id: 'Litmus', name: 'Лакмус', formula: 'Индикатор', icon: '🔵', category: 'Индикаторы', danger: 0, ions: [], color: 'rgba(150, 150, 255, 0.5)', indicator: true }
+        ];
+
+        // ====== СОСТОЯНИЕ ======
+        let currentReagents = [];
+        let pendingReagent = null;
+        let modalCallback = null;
+
+        // ====== ИНИЦИАЛИЗАЦИЯ ======
+        function init() {
+            renderReagents();
+            showAssistant('Приветствую, юный химик! Я — профессор Менделеев. Выбирай реактивы и проводи опыты! Но будь осторожен — некоторые комбинации очень опасны! 🧪', 'info');
+        }
+
+        function renderReagents() {
+            const container = document.getElementById('reagentsList');
+            const categories = {};
+            reagents.forEach(r => {
+                if (!categories[r.category]) categories[r.category] = [];
+                categories[r.category].push(r);
+            });
+
+            let html = '';
+            for (const cat in categories) {
+                html += `<div class="category-title">${cat}</div><div class="reagents-grid">`;
+                categories[cat].forEach(r => {
+                    const dangerClass = r.danger >= 2 ? 'dangerous' : '';
+                    html += `
+                        <div class="reagent ${dangerClass}" data-id="${r.id}" onclick="addReagent('${r.id}')">
+                            <div class="reagent-icon">${r.icon}</div>
+                            <div class="reagent-name">${r.name}</div>
+                            <div class="reagent-formula">${r.formula}</div>
+                        </div>
+                    `;
+                });
+                html += '</div>';
+            }
+            container.innerHTML = html;
+        }
+
+        // ====== ДОБАВЛЕНИЕ РЕАКТИВА ======
+        function addReagent(id) {
+            if (currentReagents.length >= 2) {
+                showAssistant('В пробирке уже 2 реактива! Смешайте их или очистите пробирку.', 'warning');
+                return;
+            }
+
+            const reagent = reagents.find(r => r.id === id);
+            if (!reagent) return;
+
+            // Проверка на опасность
+            if (reagent.danger >= 2) {
+                showWarningModal(reagent, () => {
+                    actuallyAddReagent(reagent);
+                });
+                return;
+            }
+
+            // Проверка опасных комбинаций заранее
+            if (currentReagents.length === 1) {
+                const existing = reagents.find(r => r.id === currentReagents[0]);
+                if (isDangerousCombo(existing, reagent)) {
+                    showDangerComboModal(existing, reagent, () => {
+                        actuallyAddReagent(reagent);
+                    });
+                    return;
+                }
+            }
+
+            actuallyAddReagent(reagent);
+        }
+
+        function actuallyAddReagent(reagent) {
+            currentReagents.push(reagent.id);
+            
+            // Визуальная подсветка
+            const el = document.querySelector(`[data-id="${reagent.id}"]`);
+            el.classList.add('selected');
+            
+            updateAddedTags();
+            
+            // Реакция помощника
+            if (currentReagents.length === 1) {
+                const phrases = [
+                    `Отлично! ${reagent.name} в пробирке. Что добавим ещё?`,
+                    `${reagent.formula} — хороший выбор! Теперь второй реактив.`,
+                    `Принял ${reagent.name}. Продолжаем эксперимент!`
+                ];
+                showAssistant(phrases[Math.floor(Math.random() * phrases.length)], 'info');
+            } else if (currentReagents.length === 2) {
+                showAssistant('Два реактива готовы! Нажмите «Смешать», чтобы увидеть реакцию! 🔬', 'info');
+            }
+        }
+
+        function updateAddedTags() {
+            const container = document.getElementById('addedReagents');
+            container.innerHTML = currentReagents.map(id => {
+                const r = reagents.find(x => x.id === id);
+                return `<div class="added-tag">${r.icon} ${r.formula}</div>`;
+            }).join('');
+        }
+
+        // ====== ПРОВЕРКА ОПАСНЫХ КОМБИНАЦИЙ ======
+        function isDangerousCombo(r1, r2) {
+            // Сильные окислители + органика = ПОЖАР/ВЗРЫВ
+            if ((r1.oxidizer && r2.organic) || (r2.oxidizer && r1.organic)) return true;
+            // Концентрированные кислоты + сильные окислители
+            if ((r1.concentrated && r2.oxidizer) || (r2.concentrated && r1.oxidizer)) return true;
+            // Марганцовка + перекись = бурная реакция
+            if ((r1.id === 'KMnO4' && r2.id === 'H2O2') || (r2.id === 'KMnO4' && r1.id === 'H2O2')) return true;
+            // Дихромат + концентрированная кислота
+            if ((r1.id === 'K2Cr2O7' && r2.concentrated) || (r2.id === 'K2Cr2O7' && r1.concentrated)) return true;
+            return false;
+        }
+
+        // ====== МОДАЛЬНЫЕ ОКНА ======
+        function showWarningModal(reagent, onConfirm) {
+            const modal = document.getElementById('modal');
+            modal.className = 'modal warning';
+            document.getElementById('modalIcon').textContent = '⚠️';
+            document.getElementById('modalTitle').textContent = 'Осторожно, опасное вещество!';
+            document.getElementById('modalText').innerHTML = `
+                Ты точно хочешь добавить <strong>${reagent.name}</strong> (${reagent.formula})?<br><br>
+                Это вещество требует особой осторожности. Профессор рекомендует быть внимательным!
+            `;
+            openModal(onConfirm);
+            showAssistant(`Стоп! ${reagent.name} — вещество повышенной опасности. Ты уверен, что хочешь его использовать?`, 'warning');
+        }
+
+        function showDangerComboModal(r1, r2, onConfirm) {
+            const modal = document.getElementById('modal');
+            modal.className = 'modal danger';
+            document.getElementById('modalIcon').textContent = '☢️';
+            document.getElementById('modalTitle').textContent = 'ОПАСНАЯ КОМБИНАЦИЯ!';
+            document.getElementById('modalText').innerHTML = `
+                Профессор категорически <strong>НЕ РЕКОМЕНДУЕТ</strong> смешивать:<br>
+                <strong>${r1.name}</strong> + <strong>${r2.name}</strong><br><br>
+                ⚠️ Возможна бурная реакция, разбрызгивание, выделение ядовитых газов или даже <strong>ВЗРЫВ</strong>!<br><br>
+                Ты всё равно хочешь продолжить?
+            `;
+            openModal(onConfirm);
+            showAssistant('НЕТ! Это очень опасно! Смешивание этих веществ может привести к взрыву или пожару! Подумай ещё раз!', 'danger');
+        }
+
+        function openModal(callback) {
+            modalCallback = callback;
+            document.getElementById('modalOverlay').classList.add('active');
+        }
+
+        function closeModal(confirmed) {
+            document.getElementById('modalOverlay').classList.remove('active');
+            if (confirmed && modalCallback) {
+                modalCallback();
+            } else if (!confirmed) {
+                showAssistant('Мудрое решение! Безопасность — прежде всего! 👨🏼‍🔬', 'info');
+            }
+            modalCallback = null;
+        }
+
+        // ====== СМЕШИВАНИЕ ======
+        function mixReagents() {
+            if (currentReagents.length !== 2) {
+                showAssistant('Добавьте ровно 2 реактива для проведения реакции!', 'warning');
+                return;
+            }
+
+            const r1 = reagents.find(r => r.id === currentReagents[0]);
+            const r2 = reagents.find(r => r.id === currentReagents[1]);
+
+            // Проверка на опасную комбинацию (взрыв)
+            if (isDangerousCombo(r1, r2)) {
+                triggerExplosion(r1, r2);
+                return;
+            }
+
+            const reaction = findReaction(r1, r2);
+            if (reaction) {
+                performReaction(reaction);
+            } else {
+                noReaction(r1, r2);
+            }
+        }
+
+        // ====== ПОИСК РЕАКЦИИ ======
+        function findReaction(r1, r2) {
+            // Индикаторы
+            if (r1.indicator || r2.indicator) return handleIndicator(r1, r2);
+            
+            // Кислота + щёлочь = нейтрализация
+            if ((r1.category === 'Кислоты' && r2.category === 'Щёлочи') || 
+                (r2.category === 'Кислоты' && r1.category === 'Щёлочи')) {
+                return {
+                    name: 'Реакция нейтрализации',
+                    equation: `${r1.formula} + ${r2.formula} → соль + H₂O`,
+                    description: 'Кислота и щёлочь нейтрализуют друг друга. Реакция экзотермическая — пробирка нагревается!',
+                    liquidColor: 'rgba(220, 230, 255, 0.6)',
+                    effect: 'heat'
+                };
+            }
+
+            // Кислота + карбонат/сода = газ
+            if (r1.category === 'Кислоты' && (r2.id === 'Na2CO3' || r2.id === 'NaHCO3')) {
+                return {
+                    name: 'Выделение углекислого газа',
+                    equation: r2.id === 'Na2CO3' 
+                        ? `${r1.formula} + Na₂CO₃ → соль + H₂O + CO₂↑`
+                        : `${r1.formula} + NaHCO₃ → соль + H₂O + CO₂↑`,
+                    description: 'Бурная реакция с выделением углекислого газа! Наблюдайте за пузырьками.',
+                    liquidColor: 'rgba(240, 240, 240, 0.5)',
+                    effect: 'gas'
+                };
+            }
+            if (r2.category === 'Кислоты' && (r1.id === 'Na2CO3' || r1.id === 'NaHCO3')) {
+                return {
+                    name: 'Выделение углекислого газа',
+                    equation: r1.id === 'Na2CO3'
+                        ? `Na₂CO₃ + ${r2.formula} → соль + H₂O + CO₂↑`
+                        : `NaHCO₃ + ${r2.formula} → соль + H₂O + CO₂↑`,
+                    description: 'Бурная реакция с выделением углекислого газа!',
+                    liquidColor: 'rgba(240, 240, 240, 0.5)',
+                    effect: 'gas'
+                };
+            }
+
+            // Кислота + перекись = кислород
+            if ((r1.category === 'Кислоты' && r2.id === 'H2O2') || (r2.category === 'Кислоты' && r1.id === 'H2O2')) {
+                return {
+                    name: 'Разложение перекиси',
+                    equation: '2H₂O₂ → 2H₂O + O₂↑',
+                    description: 'В кислой среде перекись разлагается с выделением кислорода.',
+                    liquidColor: 'rgba(230, 240, 255, 0.5)',
+                    effect: 'gas'
+                };
+            }
+
+            // Соль + щёлочь = осадок гидроксида
+            if ((r1.category === 'Соли' && r2.category === 'Щёлочи') || 
+                (r2.category === 'Соли' && r1.category === 'Щёлочи')) {
+                const salt = r1.category === 'Соли' ? r1 : r2;
+                const alkali = r1.category === 'Щёлочи' ? r1 : r2;
+                return handleSaltAlkali(salt, alkali);
+            }
+
+            // Соль + соль = осадок
+            if (r1.category === 'Соли' && r2.category === 'Соли') {
+                return handleSaltSalt(r1, r2);
+            }
+
+            // Соль + кислота
+            if ((r1.category === 'Соли' && r2.category === 'Кислоты') || 
+                (r2.category === 'Соли' && r1.category === 'Кислоты')) {
+                return {
+                    name: 'Реакция обмена',
+                    equation: `${r1.formula} + ${r2.formula} → новая соль + новая кислота`,
+                    description: 'Происходит реакция обмена между солью и кислотой.',
+                    liquidColor: 'rgba(230, 230, 240, 0.5)',
+                    effect: 'colorChange'
+                };
+            }
+
+            return null;
+        }
+
+        function handleSaltAlkali(salt, alkali) {
+            // Особые случаи
+            if (salt.id === 'CuSO4') {
+                return {
+                    name: 'Образование осадка гидроксида меди(II)',
+                    equation: `CuSO₄ + 2${alkali.formula} → Cu(OH)₂↓ + ${alkali.ions[0]}₂SO₄`,
+                    description: 'Выпадает красивый голубой студенистый осадок гидроксида меди(II).',
+                    liquidColor: 'rgba(100, 180, 255, 0.6)',
+                    precipitateColor: '#4169E1',
+                    effect: 'precipitate'
+                };
+            }
+            if (salt.id === 'FeCl3') {
+                return {
+                    name: 'Образование осадка гидроксида железа(III)',
+                    equation: `FeCl₃ + 3${alkali.formula} → Fe(OH)₃↓ + 3${alkali.ions[0]}Cl`,
+                    description: 'Выпадает бурый осадок гидроксида железа(III).',
+                    liquidColor: 'rgba(180, 120, 60, 0.5)',
+                    precipitateColor: '#8B4513',
+                    effect: 'precipitate'
+                };
+            }
+            if (salt.id === 'FeCl2' || salt.id === 'FeSO4') {
+                return {
+                    name: 'Образование осадка гидроксида железа(II)',
+                    equation: `${salt.formula} + 2${alkali.formula} → Fe(OH)₂↓ + ...`,
+                    description: 'Выпадает бело-зелёный осадок, который быстро буреет на воздухе.',
+                    liquidColor: 'rgba(150, 200, 150, 0.5)',
+                    precipitateColor: '#9ACD32',
+                    effect: 'precipitate'
+                };
+            }
+            if (salt.id === 'AlCl3') {
+                return {
+                    name: 'Образование осадка гидроксида алюминия',
+                    equation: `AlCl₃ + 3${alkali.formula} → Al(OH)₃↓ + 3${alkali.ions[0]}Cl`,
+                    description: 'Выпадает белый студенистый осадок гидроксида алюминия.',
+                    liquidColor: 'rgba(240, 240, 240, 0.5)',
+                    precipitateColor: '#F5F5F5',
+                    effect: 'precipitate'
+                };
+            }
+            if (salt.id === 'ZnSO4') {
+                return {
+                    name: 'Образование осадка гидроксида цинка',
+                    equation: `ZnSO₄ + 2${alkali.formula} → Zn(OH)₂↓ + ${alkali.ions[0]}₂SO₄`,
+                    description: 'Выпадает белый осадок гидроксида цинка.',
+                    liquidColor: 'rgba(240, 240, 240, 0.5)',
+                    precipitateColor: '#FFFFFF',
+                    effect: 'precipitate'
+                };
+            }
+            if (salt.id === 'AgNO3') {
+                return {
+                    name: 'Образование оксида серебра',
+                    equation: `2AgNO₃ + 2${alkali.formula} → Ag₂O↓ + H₂O + 2${alkali.ions[0]}NO₃`,
+                    description: 'Выпадает бурый осадок оксида серебра.',
+                    liquidColor: 'rgba(200, 200, 200, 0.5)',
+                    precipitateColor: '#654321',
+                    effect: 'precipitate'
+                };
+            }
+            if (salt.id === 'CuSO4') {
+                return {
+                    name: 'Осадок',
+                    equation: `${salt.formula} + ${alkali.formula} → осадок`,
+                    description: 'Выпадает осадок.',
+                    liquidColor: salt.color,
+                    precipitateColor: '#4169E1',
+                    effect: 'precipitate'
+                };
+            }
+
+            // По умолчанию — реакция без осадка
+            return {
+                name: 'Реакция обмена',
+                equation: `${salt.formula} + ${alkali.formula} → продукты`,
+                description: 'Происходит реакция обмена, но видимых признаков мало.',
+                liquidColor: 'rgba(230, 240, 255, 0.5)',
+                effect: 'colorChange'
+            };
+        }
+
+        function handleSaltSalt(s1, s2) {
+            // Ag+ + Cl- = AgCl белый осадок
+            if ((s1.id === 'AgNO3' && ['NaCl', 'HCl', 'BaCl2', 'CaCl2', 'FeCl2', 'FeCl3', 'AlCl3'].includes(s2.id)) ||
+                (s2.id === 'AgNO3' && ['NaCl', 'HCl', 'BaCl2', 'CaCl2', 'FeCl2', 'FeCl3', 'AlCl3'].includes(s1.id))) {
+                return {
+                    name: 'Белый творожистый осадок',
+                    equation: `AgNO₃ + хлорид → AgCl↓ + нитрат`,
+                    description: 'Качественная реакция на хлорид-ион! Выпадает белый творожистый осадок AgCl, нерастворимый в кислотах.',
+                    liquidColor: 'rgba(240, 240, 240, 0.5)',
+                    precipitateColor: '#F5F5F5',
+                    effect: 'precipitate'
+                };
+            }
+            // Ba2+ + SO4^2- = BaSO4 белый осадок
+            if ((s1.id === 'BaCl2' && ['CuSO4', 'FeSO4', 'ZnSO4', 'Na2SO4', 'H2SO4'].includes(s2.id)) ||
+                (s2.id === 'BaCl2' && ['CuSO4', 'FeSO4', 'ZnSO4', 'Na2SO4', 'H2SO4'].includes(s1.id))) {
+                return {
+                    name: 'Белый осадок сульфата бария',
+                    equation: `BaCl₂ + сульфат → BaSO₄↓ + хлорид`,
+                    description: 'Качественная реакция на сульфат-ион! Тяжёлый белый осадок BaSO₄.',
+                    liquidColor: 'rgba(240, 240, 240, 0.5)',
+                    precipitateColor: '#FFFFFF',
+                    effect: 'precipitate'
+                };
+            }
+            // Pb2+ + I- или Cl- 
+            if ((s1.id === 'PbNO32' && ['NaCl', 'HCl', 'BaCl2', 'CaCl2'].includes(s2.id)) ||
+                (s2.id === 'PbNO32' && ['NaCl', 'HCl', 'BaCl2', 'CaCl2'].includes(s1.id))) {
+                return {
+                    name: 'Белый осадок хлорида свинца',
+                    equation: `Pb(NO₃)₂ + хлорид → PbCl₂↓`,
+                    description: 'Выпадает белый осадок хлорида свинца.',
+                    liquidColor: 'rgba(240, 240, 240, 0.5)',
+                    precipitateColor: '#F0F0F0',
+                    effect: 'precipitate'
+                };
+            }
+            // CuSO4 + Na2CO3 = CuCO3 осадок
+            if ((s1.id === 'CuSO4' && s2.id === 'Na2CO3') || (s2.id === 'CuSO4' && s1.id === 'Na2CO3')) {
+                return {
+                    name: 'Зелёный осадок основного карбоната меди',
+                    equation: `2CuSO₄ + 2Na₂CO₃ + H₂O → Cu₂(OH)₂CO₃↓ + ...`,
+                    description: 'Выпадает зелёный осадок основного карбоната меди (малахит!).',
+                    liquidColor: 'rgba(100, 180, 255, 0.5)',
+                    precipitateColor: '#2E8B57',
+                    effect: 'precipitate'
+                };
+            }
+
+            return {
+                name: 'Реакция обмена',
+                equation: `${s1.formula} + ${s2.formula} → продукты`,
+                description: 'Реакция между солями, но осадок не образуется.',
+                liquidColor: 'rgba(230, 240, 255, 0.5)',
+                effect: 'colorChange'
+            };
+        }
+
+        function handleIndicator(r1, r2) {
+            const indicator = r1.indicator ? r1 : r2;
+            const other = r1.indicator ? r2 : r1;
+
+            if (indicator.id === 'Phenol') {
+                if (other.category === 'Щёлочи') {
+                    return {
+                        name: 'Малиновое окрашивание',
+                        equation: `Фенолфталеин + щёлочь → малиновый цвет`,
+                        description: 'Фенолфталеин в щелочной среде становится ярко-малиновым! Качественная реакция на щёлочь.',
+                        liquidColor: 'rgba(255, 50, 150, 0.7)',
+                        effect: 'colorChange'
+                    };
+                }
+                if (other.category === 'Кислоты') {
+                    return {
+                        name: 'Бесцветный раствор',
+                        equation: `Фенолфталеин + кислота → бесцветный`,
+                        description: 'В кислой среде фенолфталеин остаётся бесцветным.',
+                        liquidColor: 'rgba(255, 255, 255, 0.3)',
+                        effect: 'colorChange'
+                    };
+                }
+            }
+            if (indicator.id === 'Litmus') {
+                if (other.category === 'Кислоты') {
+                    return {
+                        name: 'Красный цвет лакмуса',
+                        equation: `Лакмус + кислота → красный`,
+                        description: 'Лакмус в кислоте краснеет!',
+                        liquidColor: 'rgba(255, 80, 80, 0.7)',
+                        effect: 'colorChange'
+                    };
+                }
+                if (other.category === 'Щёлочи') {
+                    return {
+                        name: 'Синий цвет лакмуса',
+                        equation: `Лакмус + щёлочь → синий`,
+                        description: 'Лакмус в щёлочи синеет!',
+                        liquidColor: 'rgba(80, 80, 255, 0.7)',
+                        effect: 'colorChange'
+                    };
+                }
+            }
+
+            return {
+                name: 'Индикаторная проба',
+                equation: `${indicator.formula} + ${other.formula}`,
+                description: 'Индикаторная реакция.',
+                liquidColor: other.color,
+                effect: 'colorChange'
+            };
+        }
+
+        // ====== ВЫПОЛНЕНИЕ РЕАКЦИИ ======
+        function performReaction(reaction) {
+            const liquid = document.getElementById('liquid');
+            const precipitate = document.getElementById('precipitate');
+            const bubbles = document.getElementById('bubbles');
+            const smoke = document.getElementById('smoke');
+            const fire = document.getElementById('fire');
+            
+            // Очистка
+            liquid.style.height = '0%';
+            precipitate.style.height = '0%';
+            bubbles.innerHTML = '';
+            smoke.innerHTML = '';
+            fire.classList.remove('active');
+            
+            setTimeout(() => {
+                liquid.style.height = '70%';
+                liquid.style.backgroundColor = reaction.liquidColor;
+            }, 100);
+
+            // Эффекты
+            if (reaction.effect === 'precipitate' && reaction.precipitateColor) {
+                setTimeout(() => {
+                    precipitate.style.height = '25%';
+                    precipitate.style.backgroundColor = reaction.precipitateColor;
+                }, 700);
+            }
+            if (reaction.effect === 'gas') {
+                setTimeout(() => createBubbles(30), 500);
+            }
+            if (reaction.effect === 'heat') {
+                document.getElementById('testTube').classList.add('glow');
+                createSmoke();
+                setTimeout(() => document.getElementById('testTube').classList.remove('glow'), 1500);
+            }
+            if (reaction.effect === 'smoke') {
+                createSmoke();
+            }
+            if (reaction.effect === 'fire') {
+                fire.classList.add('active');
+            }
+
+            document.getElementById('resultText').innerHTML = `
+                <strong>${reaction.name}</strong><br>
+                ${reaction.description}
+                <div class="equation">${reaction.equation}</div>
+            `;
+
+            const phrases = [
+                'Отличная реакция! Видно, что вы разбираетесь в химии!',
+                'Прекрасный результат! Так держать, юный химик!',
+                'Замечательный опыт! Именно так работают настоящие химики!',
+                'Браво! Реакция прошла как по учебнику!'
+            ];
+            showAssistant(phrases[Math.floor(Math.random() * phrases.length)], 'info');
+        }
+
+        function noReaction(r1, r2) {
+            const liquid = document.getElementById('liquid');
+            liquid.style.height = '70%';
+            liquid.style.backgroundColor = 'rgba(200, 200, 220, 0.4)';
+            
+            document.getElementById('resultText').innerHTML = `
+                <strong>Реакция не идёт</strong><br>
+                Между ${r1.formula} и ${r2.formula} реакция в данных условиях не происходит. 
+                Согласно правилам обмена, реакция идёт только если образуется осадок, газ или вода.
+                <div class="equation">${r1.formula} + ${r2.formula} ≠ реакция</div>
+            `;
+            showAssistant('Реакция не пошла. Подумай, какие условия нужны для протекания реакции обмена!', 'info');
+        }
+
+        // ====== ВЗРЫВ ======
+        function triggerExplosion(r1, r2) {
+            showAssistant('О НЕТ! ВЗРЫВ! Я же предупреждал! 🙀', 'danger');
+            
+            // Тряска экрана
+            document.body.classList.add('shake');
+            setTimeout(() => document.body.classList.remove('shake'), 600);
+
+            // Вспышка
+            const explosion = document.getElementById('explosion');
+            explosion.classList.add('active');
+            setTimeout(() => explosion.classList.remove('active'), 1200);
+
+            // Частицы
+            createExplosionParticles();
+
+            // Пробирка "разбивается"
+            const tube = document.getElementById('testTube');
+            tube.style.opacity = '0.3';
+            setTimeout(() => tube.style.opacity = '1', 2000);
+
+            document.getElementById('resultText').innerHTML = `
+                <strong style="color:#ff5722;">💥 ВЗРЫВ! 💥</strong><br>
+                Смешивание <strong>${r1.name}</strong> и <strong>${r2.name}</strong> привело к бурной, опасной реакции!<br>
+                В реальной лаборатории это могло бы привести к серьёзным травмам.<br>
+                <div class="equation" style="border-color:#ff5722; color:#ff5722;">⚠️ ОПАСНАЯ КОМБИНАЦИЯ ⚠️</div>
+            `;
+
+            setTimeout(() => {
+                showAssistant('В реальной жизни такие эксперименты могут стоить здоровья или даже жизни! Всегда думай, прежде чем смешивать вещества!', 'danger');
+            }, 2000);
+        }
+
+        function createExplosionParticles() {
+            const colors = ['#ff5722', '#ffeb3b', '#ff9800', '#fff', '#f44336'];
+            for (let i = 0; i < 40; i++) {
+                setTimeout(() => {
+                    const p = document.createElement('div');
+                    p.className = 'explosion-particle';
+                    p.style.background = colors[Math.floor(Math.random() * colors.length)];
+                    p.style.left = '50%';
+                    p.style.top = '50%';
+                    p.style.boxShadow = `0 0 10px ${p.style.background}`;
+                    document.body.appendChild(p);
+
+                    const angle = Math.random() * Math.PI * 2;
+                    const distance = 200 + Math.random() * 400;
+                    const dx = Math.cos(angle) * distance;
+                    const dy = Math.sin(angle) * distance;
+
+                    p.animate([
+                        { transform: 'translate(-50%, -50%) scale(1)', opacity: 1 },
+                        { transform: `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px)) scale(0)`, opacity: 0 }
+                    ], { duration: 1000 + Math.random() * 500, easing: 'cubic-bezier(0.1, 0.8, 0.3, 1)' });
+
+                    setTimeout(() => p.remove(), 1500);
+                }, i * 20);
+            }
+        }
+
+        // ====== ЭФФЕКТЫ ======
+        function createBubbles(count = 20) {
+            const bubbles = document.getElementById('bubbles');
+            for (let i = 0; i < count; i++) {
+                setTimeout(() => {
+                    const bubble = document.createElement('div');
+                    bubble.className = 'bubble';
+                    const size = Math.random() * 12 + 5;
+                    bubble.style.width = size + 'px';
+                    bubble.style.height = size + 'px';
+                    bubble.style.left = Math.random() * 100 + 'px';
+                    bubble.style.bottom = '0px';
+                    bubble.style.animationDuration = (Math.random() * 1 + 1.5) + 's';
+                    bubbles.appendChild(bubble);
+                    setTimeout(() => bubble.remove(), 2500);
+                }, i * 80);
+            }
+        }
+
+        function createSmoke() {
+            const smoke = document.getElementById('smoke');
+            smoke.innerHTML = '';
+            for (let i = 0; i < 15; i++) {
+                setTimeout(() => {
+                    const p = document.createElement('div');
+                    p.className = 'smoke-particle';
+                    const size = 20 + Math.random() * 30;
+                    p.style.width = size + 'px';
+                    p.style.height = size + 'px';
+                    p.style.setProperty('--dx', (Math.random() * 60 - 30) + 'px');
+                    p.style.animationDuration = (2 + Math.random() * 2) + 's';
+                    smoke.appendChild(p);
+                    setTimeout(() => p.remove(), 4000);
+                }, i * 150);
+            }
+        }
+
+        // ====== ПОМОЩНИК ======
+        function showAssistant(text, type = 'info') {
+            const bubble = document.getElementById('assistantBubble');
+            const textEl = document.getElementById('assistantText');
+            textEl.textContent = text;
+            bubble.className = 'assistant-bubble visible ' + type;
+            
+            clearTimeout(window.assistantTimeout);
+            window.assistantTimeout = setTimeout(() => {
+                bubble.classList.remove('visible');
+            }, 6000);
+        }
+
+        function showAssistantTip() {
+            const tips = [
+                'Совет: кислоты и щёлочи нейтрализуют друг друга с образованием соли и воды!',
+                'Помни: реакция обмена идёт, если выпадает осадок, выделяется газ или образуется вода!',
+                'Осторожно: марганцовка с органикой — это пожароопасно!',
+                'Фенолфталеин — индикатор щелочей, становится малиновым!',
+                'Лакмус в кислоте красный, в щёлочи — синий!',
+                'Никогда не смешивай концентрированные кислоты с окислителями!',
+                'AgNO₃ — качественная реакция на хлорид-ион (белый осадок)!',
+                'BaCl₂ — качественная реакция на сульфат-ион (белый осадок)!'
+            ];
+            showAssistant(tips[Math.floor(Math.random() * tips.length)], 'info');
+        }
+
+        // ====== СБРОС ======
+        function resetTestTube() {
+            currentReagents = [];
+            document.getElementById('liquid').style.height = '0%';
+            document.getElementById('precipitate').style.height = '0%';
+            document.getElementById('bubbles').innerHTML = '';
+            document.getElementById('smoke').innerHTML = '';
+            document.getElementById('fire').classList.remove('active');
+            document.getElementById('addedReagents').innerHTML = '';
+            document.getElementById('resultText').innerHTML = 'Выберите реактивы и нажмите «Смешать» для проведения реакции.';
+            
+            document.querySelectorAll('.reagent').forEach(el => el.classList.remove('selected'));
+            showAssistant('Пробирка очищена. Готов к новым экспериментам!', 'info');
+        }
+
+        // Старт
+        init();
+    </script>
+</body>
+</html>
